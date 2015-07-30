@@ -478,6 +478,7 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
 
     /* Synchronize */
     retry_count = 0;
+    int outer_retry = 0;
     for (;;) {
         /* Send CMD_SIGN_ON. */
         if (send_receive (a, (unsigned char*)"\1", 1, response, 11) &&
@@ -487,10 +488,22 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
             break;
         }
         ++retry_count;
-        if (debug_level > 1)
-            printf ("stk-probe: error %d\n", retry_count);
+        if (debug_level > 1) {
+            printf ("stk-probe: retry %d: "
+                "%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x-%02x\n",
+                retry_count, response[0], response[1], response[2],
+                response[3], response[4], response[5], response[6],
+                response[7], response[8], response[9], response[10]);
+        }
         if (retry_count >= 3) {
             /* Bad reply or no device connected */
+            retry_count = 0;
+            serial_close();
+            usleep(200000);
+            serial_open(port, baud_rate, 1000);
+            outer_retry++;
+        }
+        if (outer_retry >= 2) {
             free (a);
             serial_close ();
             return 0;

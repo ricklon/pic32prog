@@ -37,6 +37,14 @@ family_t family_mx3 = { "mx3",
 static const
 family_t family_mz  = { "mz",
                         80, 0xffc0, 2048, print_mz,  pic32_pemz,  1052, 0x0502 };
+/*
+ * This one is a special one for the bootloader. We have no idea what we're
+ * programming, so set the values to the maximum out of all the others.
+ * We don't really care at the end of the day.
+ */
+static const
+family_t family_bl  = { "bootloader",
+                        80, 0,      1024, 0,         0,           0,    0      };
 
 /*
  * Table of PIC32 chip variants.
@@ -210,7 +218,7 @@ static const struct {
     {0x514F053, "MZ2048ECM144", 2048,   &family_mz},
 
     /* USB bootloader */
-    {0xEAFB00B, "Bootloader",   0,      0},
+    {0xEAFB00B, "Bootloader",   0,      &family_bl},
     {0}
 };
 
@@ -383,24 +391,16 @@ unsigned target_flash_bytes (target_t *t)
 
 unsigned target_boot_bytes (target_t *t)
 {
-    if (! t->family)
-        return t->boot_bytes;
     return t->family->boot_kbytes * 1024;
 }
 
 unsigned target_devcfg_offset (target_t *t)
 {
-    if (! t->family)
-        return 0;
     return t->family->devcfg_offset;
 }
 
 unsigned target_block_size (target_t *t)
 {
-    if (! t->family) {
-        /* Use 1024k block for bootloader. */
-        return 1024;
-    }
     return t->family->bytes_per_row;
 }
 
@@ -409,7 +409,7 @@ unsigned target_block_size (target_t *t)
  */
 void target_use_executive (target_t *t)
 {
-    if (t->adapter->load_executive != 0 && t->family)
+    if (t->adapter->load_executive != 0 && t->family->pe_nwords != 0)
         t->adapter->load_executive (t->adapter, t->family->pe_code,
             t->family->pe_nwords, t->family->pe_version);
 }
@@ -419,7 +419,7 @@ void target_use_executive (target_t *t)
  */
 void target_print_devcfg (target_t *t)
 {
-    if (! t->family)
+    if (! t->family->devcfg_offset)
         return;
 
     unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset (t);
@@ -565,7 +565,7 @@ void target_program_block (target_t *t, unsigned addr,
 void target_program_devcfg (target_t *t, unsigned devcfg0,
         unsigned devcfg1, unsigned devcfg2, unsigned devcfg3)
 {
-    if (! t->family)
+    if (! t->family->devcfg_offset)
         return;
 
     unsigned addr = 0x1fc00000 + t->family->devcfg_offset;
